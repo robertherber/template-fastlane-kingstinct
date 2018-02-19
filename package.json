@@ -1,6 +1,6 @@
 {
   "name": "template-fastlane-kingstinct",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "SAO template to quickly set up fastlane for React Native",
   "repository": {
     "url": "robertherber/template-fastlane-kingstinct",
@@ -10,6 +10,7 @@
   "license": "MIT",
   "files": [
     "sao.js",
+    "utils.js",
     "template"
   ],
   "scripts": {
