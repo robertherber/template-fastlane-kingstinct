@@ -3550,8 +3550,9 @@ safe-buffer@^5.0.1, safe-buffer@^5.1.1, safe-buffer@~5.1.0, safe-buffer@~5.1.1:
   version "5.1.1"
   resolved "https://registry.yarnpkg.com/safe-buffer/-/safe-buffer-5.1.1.tgz#893312af69b2123def71f57889001671eeb2c853"
 
-"sao@file:../open source/sao/":
-  version "0.22.13"
+sao@^0.22.14:
+  version "0.22.14"
+  resolved "https://registry.yarnpkg.com/sao/-/sao-0.22.14.tgz#2d259cf6b33747debf507a488a4be226cd15a03a"
   dependencies:
     boxen "^1.2.2"
     cac "^4.3.4"
