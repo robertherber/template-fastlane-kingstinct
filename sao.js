@@ -102,7 +102,7 @@ module.exports = {
     INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: {
       message: 'Add sample setup for different runtime configurations?',
       type: 'confirm',
-      default: true,
+      default: false,
       when: answers => answers.SUPPORT_MULTIPLE_APP_IDS,
     },
     ENABLE_BUGSNAG: {
@@ -126,7 +126,6 @@ module.exports = {
       ...answers,
       PROJECT_NAME: packageName,
       ENABLE_WORKSPACES: workspaceExists,
-      INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: true,
       TEAM_NAME_ASCII,
     });
 
@@ -194,7 +193,7 @@ module.exports = {
     gitignore: '.gitignore',
   },
   filters: {
-    'config/*': '!INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION',
+    'config/*.js': 'INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION',
   },
   showTip: true,
   gitInit: false,

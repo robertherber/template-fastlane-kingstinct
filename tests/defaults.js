@@ -10,6 +10,8 @@ const template = {
 
 test('default values', async (t) => {
   const stream = await sao.mockPrompt(template, {
+    INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: false,
+    SUPPORT_MULTIPLE_APP_IDS: false,
   });
 
   t.snapshot(stream.fileList, 'Generated files');
