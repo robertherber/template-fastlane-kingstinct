@@ -103,7 +103,6 @@ module.exports = {
       message: 'Add sample setup for different runtime configurations?',
       type: 'confirm',
       default: true,
-      store: true,
       when: answers => answers.SUPPORT_MULTIPLE_APP_IDS,
     },
     ENABLE_BUGSNAG: {

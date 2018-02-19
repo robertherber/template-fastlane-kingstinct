@@ -10,7 +10,6 @@ const template = {
 
 test('default values', async (t) => {
   const stream = await sao.mockPrompt(template, {
-    targetPath: './',
   });
 
   t.snapshot(stream.fileList, 'Generated files');
