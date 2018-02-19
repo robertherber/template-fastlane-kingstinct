@@ -20,7 +20,7 @@ after_all do |lane|
 end
 
 def get_next_build_number(searchForTag)
-  lastbuildtag = `git describe --match "#{searchForTag}*"`
+  lastbuildtag = `git describe --all --match "#{searchForTag}*"`
   match = /\/[[:digit:]]+(\-|$)/.match(lastbuildtag)
   lastchar = match[0].length - 1
   buildNumberStr = match[0][1..lastchar]
@@ -30,12 +30,30 @@ def get_next_build_number(searchForTag)
   return buildNumber.to_s
 end
 
-def certs_n_shit(app_identifier)
+def setup_app(app_identifier, name_suffix, justBuild)
+  produce(
+    app_name: name_suffix ? "<%= DISPLAY_NAME %> #{name_suffix}" : "<%= DISPLAY_NAME %>",
+    app_identifier: app_identifier,
+    skip_itc: justBuild,
+    <% if(ENABLE_TEAMS) {%>team_name: ENV['FASTLANE_TEAM_NAME'] <%}%>
+  )
+  <% if(HAS_EXTENSION_SUFFIX) {%>produce(
+    app_name: name_suffix ? "<%= DISPLAY_NAME %> #{name_suffix} <%= EXTENSION_SUFFIX %>" : "<%= DISPLAY_NAME %> <%= EXTENSION_SUFFIX %>",
+    app_identifier: app_identifier,
+    skip_itc: justBuild,
+    bundle_identifier_suffix: <%= EXTENSION_SUFFIX %>",
+    <% if(ENABLE_TEAMS) {%>team_name: ENV['FASTLANE_TEAM_NAME'] <%}%>
+  )
+  <%}%>
+end
+
+def certs_n_shit(app_identifier, name_suffix)
+  setup_app(app_identifier, name_suffix, true)
   match(
     type: "appstore",
     app_identifier: [
       app_identifier,
-      <% if(HAS_EXTENSION_SUFFIX) {%>"#{app_identifier}.<%= EXTENSION_SUFFIX %>"<%}%>
+      <% if(HAS_EXTENSION_SUFFIX) {%>"{app_identifier}.<%= EXTENSION_SUFFIX %>"<%}%>
     ],
     clone_branch_directly: true
   ) # more information: https://codesigning.guide
@@ -49,14 +67,15 @@ error do |lane, exception|
 end
 
 before_all do
-  versionNumber = JSON.parse(File.read("../package.json"))["version"]
+  packageJson = JSON.parse(File.read("../package.json"))
+  versionNumber = packageJson["version"]
   ENV['VERSION_NUMBER'] = ENV['FL_VERSION_NUMBER_VERSION_NUMBER'] = lane_context[SharedValues::VERSION_NUMBER] = versionNumber
   <% if(ENABLE_TEAMS) { %>ENV['FASTLANE_TEAM_NAME'] = ENV['DEV_PORTAL_TEAM_NAME'] = '<%= TEAM_NAME %>'
   ENV['PILOT_TEAM_NAME'] = ENV['FASTLANE_ITC_TEAM_NAME'] = '<%=TEAM_NAME_ASCII%>'<%}%>
   <% if(ENABLE_ITC_PROVIDER) { %>ENV['PILOT_ITC_PROVIDER'] = '<%= PILOT_ITC_PROVIDER %>'<%}%>
 
   <% if(!MATCH_GIT_URL) {%>#<%}%>ENV['MATCH_GIT_URL'] = '<%= MATCH_GIT_URL %>'
-  <% if(!ENABLE_SUPPLY_JSON_KEY) { %>#<% } %>ENV['SUPPLY_JSON_KEY'] = ENV['<%= SUPPLY_JSON_KEY %>']
+  ENV['SUPPLY_JSON_KEY'] = ENV['<%= SUPPLY_JSON_KEY %>']
 end
 
 platform :android do
@@ -83,6 +102,8 @@ platform :android do
 
   desc "Submit a new Alpha Build to Play Store"
   lane :alpha do
+    ensure_git_status_clean
+
     buildNumber = get_next_build_number('fastlane-android')
     ENV['BUILD_NUMBER'] = buildNumber
     versionNumber = ENV['VERSION_NUMBER']
@@ -91,10 +112,9 @@ platform :android do
     <% if(ENABLE_BUGSNAG) { %>
     bundleForBugsnag('android')
     <% } %>
-    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>#when building multiple flavors
-    #deployandroid(false, 'test')
-    #deployandroid(true, 'production')<%}%>
-    deployandroid(true, '')
+    gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>deployandroid(false, 'staging')<%}%>
+    <% if(!SUPPORT_MULTIPLE_APP_IDS) {%>deployandroid(true, '')<%}%>
 
     add_git_tag(
       grouping: "fastlane-android-builds",
@@ -102,6 +122,10 @@ platform :android do
       build_number: buildNumber
     )
 
+    push_git_tags
+
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>#add any additional appIds after adding the git tag - if one has succeeded (but others fail) we want the next build to be incremented
+    deployandroid(true, 'production')<%}%>
     notification(
       title: 'Done!',
       message: "Deployed new version #{versionNumber} (#{buildNumber}) to Google Play"
@@ -143,7 +167,6 @@ def deployandroid(is_production = false, flavor)
 
   path_to_apk = flavor != '' ? "android/app/build/outputs/apk/app-#{flavor}-release.apk" : "android/app/build/outputs/apk/app-release.apk"
 
-  gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
   gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: flavor, properties: {
     'buildNumber' => ENV['BUILD_NUMBER'],
     'versionNumber' => ENV['VERSION_NUMBER']
@@ -160,23 +183,18 @@ def deployandroid(is_production = false, flavor)
   uploadBugsnag('android', app_identifier, ENV['VERSION_NUMBER'], lane_context[SharedValues::BUILD_NUMBER])
   <% } %>
 
-  add_git_tag(
-    grouping: "fastlane-android-builds",
-    prefix: "#{ENV['VERSION_NUMBER']}/",
-    build_number: buildNumber
-  )
-
   reset_git_repo(
-    force: true,
     files: [
       ".#{ENV['APPICON_PATH']}",
     ]
   )
 end
 
-def resignAndDeploy(app_identifier)
+def resignAndDeploy(app_identifier, app_name_suffix)
   ENV["APP_IDENTIFIER"] = ENV['SIGH_APP_IDENTIFIER'] = app_identifier
   `rm -rf $TMPDIR`;
+
+  setup_app(app_identifier, app_name_suffix, false)
 
   act(
     archive_path: "<%= PROJECT_NAME %>.ipa",
@@ -185,6 +203,7 @@ def resignAndDeploy(app_identifier)
     },
   )
   <% if(HAS_EXTENSION_SUFFIX) {%>
+  setup_app("#{app_identifier}.<%= EXTENSION_SUFFIX %>", "#{app_name_suffix} <%= EXTENSION_SUFFIX %>", false)
   act(
     archive_path: "<%= PROJECT_NAME %>.ipa",
     plist_file: "PlugIns/<%= EXTENSION_SUFFIX %>.appex/Info.plist",
@@ -192,13 +211,12 @@ def resignAndDeploy(app_identifier)
       ":CFBundleIdentifier" => "#{app_identifier}.<%= EXTENSION_SUFFIX %>",
     },
   )<%}%>
-
   sigh(app_identifier: "#{app_identifier}")
   <% if(HAS_EXTENSION_SUFFIX) {%>sigh(app_identifier: "#{app_identifier}.<%= EXTENSION_SUFFIX %>")<%}%>
-
   resign(
-    ipa: "<%= PROJECT_NAME %>.ipa", # can omit if using the `ipa` action
+    ipa: "<%= PROJECT_NAME %>.ipa",
     use_app_entitlements: true,
+    display_name: app_name_suffix ? "<%= DISPLAY_NAME %> #{app_name_suffix}" : "<%= DISPLAY_NAME %>",
     signing_identity: "<%= SIGNING_IDENTITY %>",
     bundle_id: app_identifier,
     provisioning_profile: {
@@ -232,7 +250,9 @@ def uploadBugsnag(platform, bundle, version, buildnumber)
   Dir.chdir('..'){
     system("curl https://upload.bugsnag.com/ -F apiKey=<%= BUGSNAG_API_KEY %> -F codeBundleId=#{bundle}-#{version}-#{buildnumber} -F minifiedUrl=main.jsbundle* -F sourceMap=@#{platform}.bundle.map -F minifiedFile=@#{platform}.bundle -F overwrite=true") || exit(1)
 
-    upload_symbols_to_bugsnag
+    if platform == 'ios'
+      upload_symbols_to_bugsnag
+    end
   }
 end
 
@@ -245,15 +265,14 @@ platform :ios do
   desc "certs_n_shit"
   lane :certs do
     # recommended if you're using the config setup suggested
-    # certs_n_shit('<%= APP_IDENTIFIER %>.development')
-    certs_n_shit('<%= APP_IDENTIFIER %>')
+    certs_n_shit('<%= APP_IDENTIFIER %>.development', 'development')
   end
 
   desc "deploy all ios builds"
   lane :deployios do
     # add all app identifiers you want to upload here
-    <% if(!SUPPORT_MULTIPLE_APP_IDS) {%>#resignAndDeploy('<%= APP_IDENTIFIER %>.test')<%}%>
-    resignAndDeploy('<%= APP_IDENTIFIER %>')
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>resignAndDeploy('<%= APP_IDENTIFIER %>.test', 'Beta')<%}%>
+    resignAndDeploy('<%= APP_IDENTIFIER %>', false)
   end
 
   desc "Regenerates appIcons"
@@ -268,6 +287,8 @@ platform :ios do
   desc "Submit a new Beta Build to Apple TestFlight"
   desc "This will also make sure the profile is up to date"
   lane :beta do
+    ensure_git_status_clean
+
     buildNumber = get_next_build_number('fastlane-ios')
     ENV['BUILD_NUMBER'] = ENV['FL_BUILD_NUMBER_BUILD_NUMBER'] = lane_context[SharedValues::BUILD_NUMBER] = buildNumber
 
@@ -294,9 +315,11 @@ platform :ios do
     <% } %>
     # resets temporary changes to
     reset_git_repo(
-      force: true,
       files: [
         "./ios/<%= PROJECT_NAME %>/Info.plist",
+        "./ios/<%= PROJECT_NAME %>Tests/Info.plist",
+        "./ios/<%= PROJECT_NAME %>-tvOS/Info.plist",
+        "./ios/<%= PROJECT_NAME %>-tvOSTests/Info.plist",
         "#{ENV["XCODE_PROJECT"] }/project.pbxproj"
       ]
     )
@@ -307,6 +330,8 @@ platform :ios do
       prefix: "#{ENV['VERSION_NUMBER']}/",
       build_number: buildNumber
     )
+
+    push_git_tags
 
     deployios
 

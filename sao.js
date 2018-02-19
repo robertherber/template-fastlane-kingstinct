@@ -36,21 +36,14 @@ module.exports = {
     },
   },
   prompts: {
+    DISPLAY_NAME: {
+      message: 'App Display Name:',
+      default: packageName,
+      store: true,
+    },
     APP_IDENTIFIER: {
       message: 'App Identifier:',
       default: 'com.exampleCompany.exampleApp',
-      store: true,
-    },
-    ENABLE_BUGSNAG: {
-      message: 'Enable Bugsnag?',
-      type: 'confirm',
-      default: false,
-      store: true,
-    },
-    BUGSNAG_API_KEY: {
-      message: 'Bugsnag API Key:',
-      default: 'exampleBugsnagKey123',
-      when: answers => answers.ENABLE_BUGSNAG,
       store: true,
     },
     ENABLE_TEAMS: {
@@ -80,21 +73,15 @@ module.exports = {
       message: 'URL to Match Git Repository:',
       store: true,
     },
-    ENABLE_SUPPLY_JSON_KEY: {
-      message: 'Enable Supply to upload Android builds to Google Play?',
-      default: false,
-      type: 'confirm',
-      store: true,
-    },
     SUPPLY_JSON_KEY: {
       message: 'Environment variable pointing out your Supply Json file (if you need to set it up follow these instructions https://docs.fastlane.tools/getting-started/android/setup/#setting-up-supply):',
-      when: answers => answers.ENABLE_SUPPLY_JSON_KEY,
       store: true,
     },
     ENABLE_ITC_PROVIDER: {
-      message: 'Do you need to specify an ITC Provider? Common if you have multiple teams.',
+      message: 'Do you need to specify an ITC Provider? Can happen if you have multiple teams',
       type: 'confirm',
       store: true,
+      default: false,
       when: answers => answers.ENABLE_TEAMS,
     },
     PILOT_ITC_PROVIDER: {
@@ -119,6 +106,18 @@ module.exports = {
       store: true,
       when: answers => answers.SUPPORT_MULTIPLE_APP_IDS,
     },
+    ENABLE_BUGSNAG: {
+      message: 'Enable Bugsnag?',
+      type: 'confirm',
+      default: false,
+      store: true,
+    },
+    BUGSNAG_API_KEY: {
+      message: 'Bugsnag API Key:',
+      default: 'exampleBugsnagKey123',
+      when: answers => answers.ENABLE_BUGSNAG,
+      store: true,
+    },
   },
   enforceCurrentFolder: true,
   data: (answers) => {
@@ -141,11 +140,51 @@ module.exports = {
     });
 
     if (data.TEAM_NAME_ASCII !== ctx.answers.TEAM_NAME) {
-      ctx.log.warn(`iTunes Connect team names are not supporting non-ascii characters. We've tried to convert it (we got ${data.TEAM_NAME_ASCII}) but please double-check on https://itunesconnect.apple.com/ that it's correctly set.`);
+      ctx.log.info(`iTunes Connect team names are not supporting non-ascii characters. We've tried to convert it (we got ${data.TEAM_NAME_ASCII}) but please double-check on https://itunesconnect.apple.com/ that it's correctly set.`);
+    }
+
+    ctx.log.info(`Add the following to your 'app/build.gradle', before 'android {':
+  ...
+  def getVersionCode = { ->
+    def code = project.hasProperty('buildNumber') ? buildNumber.toInteger() : -1
+    println "VersionCode is set to $code"
+    return code
+  }
+
+  def getVersionName = { ->
+    def jsonFile = file('../../package.json')
+    def parsedJson = new groovy.json.JsonSlurper().parseText(jsonFile.text)
+    def versionName = parsedJson.version
+
+    println "VersionName is set to $versionName"
+    return versionName
+  }
+  ...`);
+
+    ctx.log.info(`And inside 'defaultConfig {':
+  ...
+  versionCode getVersionCode()
+  versionName getVersionName()
+  ...
+  `);
+
+    if (data.SUPPORT_MULTIPLE_APP_IDS) {
+      ctx.log.info(`before 'applicationVariants.all { variant ->':
+  ...
+  productFlavors{
+    test {
+      applicationIdSuffix ".test"
+    }
+    production{
+
+    }
+  }
+  ...
+`);
     }
 
     if (!process.env.MATCH_USERNAME || !process.env.FASTLANE_USER) {
-      ctx.log.warn(`
+      ctx.log.info(`
       It's recommended to add your username to your environment variables (so you don't get asked for it all the time), if you're using ~/.bash_profile:
       export MATCH_USERNAME=myappleid@myemailprovider.com
       export FASTLANE_USER=myappleid@myemailprovider.com
