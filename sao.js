@@ -2,13 +2,32 @@
 const fs = require('fs');
 const plist = require('plist'); */
 
-const { getPackageName, getWorkspaceExists } = require('./utils');
+const latinize = require('latinize');
+const _ = require('lodash');
+const yarnInstall = require('yarn-install');
+const { getPackageName, getWorkspaceExists, yarnLockExists } = require('./utils');
+
+_.extend(
+  latinize.characters,
+  {
+    Ä: 'Ae',
+    Ü: 'Ue',
+    ä: 'ae',
+    å: 'aa',
+    Å: 'Aa',
+    ö: 'oe',
+    Ö: 'Oe',
+    ü: 'ue',
+  },
+);
 
 const packageName = getPackageName();
 
 const workspaceExists = getWorkspaceExists();
 
 const defaultExtensionPostfix = 'ExampleExtension';
+
+let data;
 
 module.exports = {
   templateOptions: {
@@ -18,26 +37,20 @@ module.exports = {
   },
   prompts: {
     APP_IDENTIFIER: {
-      message: 'What app identifier are you using?',
+      message: 'App Identifier:',
       default: 'com.exampleCompany.exampleApp',
       store: true,
     },
     ENABLE_BUGSNAG: {
-      message: 'Do you want to use Bugsnag for crash reporting?',
+      message: 'Enable Bugsnag?',
       type: 'confirm',
       default: false,
       store: true,
     },
     BUGSNAG_API_KEY: {
-      message: 'What is your Bugsnag API key?',
+      message: 'Bugsnag API Key:',
       default: 'exampleBugsnagKey123',
       when: answers => answers.ENABLE_BUGSNAG,
-      store: true,
-    },
-    ENABLE_WORKSPACES: {
-      message: "Are you planning to use iOS Workspaces (most common if you're using Cocoapods)?",
-      type: 'confirm',
-      when: () => !workspaceExists,
       store: true,
     },
     ENABLE_TEAMS: {
@@ -47,34 +60,42 @@ module.exports = {
       store: true,
     },
     TEAM_NAME: {
-      message: 'Whats the name of the development team for this app?',
+      message: 'Enter team name for this app:',
       when: answers => answers.ENABLE_TEAMS,
       store: true,
     },
-    EXTENSION_POSTFIX: {
-      message: "(Ignore if you don't use iOS extensions) Name one Extensions App Identifier suffix",
-      default: defaultExtensionPostfix,
+    HAS_EXTENSION_SUFFIX: {
+      message: 'Enable iOS extension support?',
+      type: 'confirm',
+      default: false,
       store: true,
     },
+    EXTENSION_SUFFIX: {
+      message: 'Name a Extension App Identifier Suffix to set up sample implementation:',
+      default: defaultExtensionPostfix,
+      store: true,
+      when: answers => answers.HAS_EXTENSION_SUFFIX,
+    },
     MATCH_GIT_URL: {
-      message: 'URL to Match Git Repository - used to store certificates',
+      message: 'URL to Match Git Repository:',
       store: true,
     },
     ENABLE_SUPPLY_JSON_KEY: {
-      message: 'Do you want to setup Supply to upload Android builds to Google Play? Follow these instructions https://docs.fastlane.tools/getting-started/android/setup/#setting-up-supply:',
+      message: 'Enable Supply to upload Android builds to Google Play?',
       default: false,
       type: 'confirm',
       store: true,
     },
     SUPPLY_JSON_KEY: {
-      message: 'Environment variable pointing out your Supply Json file: ',
+      message: 'Environment variable pointing out your Supply Json file (if you need to set it up follow these instructions https://docs.fastlane.tools/getting-started/android/setup/#setting-up-supply):',
       when: answers => answers.ENABLE_SUPPLY_JSON_KEY,
       store: true,
     },
     ENABLE_ITC_PROVIDER: {
-      message: 'Do you need to specify an ITC Provider?',
+      message: 'Do you need to specify an ITC Provider? Common if you have multiple teams.',
       type: 'confirm',
       store: true,
+      when: answers => answers.ENABLE_TEAMS,
     },
     PILOT_ITC_PROVIDER: {
       message: 'Whats your ITC Provider?',
@@ -82,34 +103,61 @@ module.exports = {
       store: true,
     },
     SIGNING_IDENTITY: {
-      message: 'Whats your signing identity?',
+      message: 'Signing identity (found in keychain):',
       store: true,
     },
-    /* INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: {
-      message: 'Add sample se
-      tup for different runtime configurations (including a few different app identifiers)',
+    SUPPORT_MULTIPLE_APP_IDS: {
+      message: 'Support multiple app identifiers?',
       type: 'confirm',
       default: true,
       store: true,
-    }, */
+    },
+    INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: {
+      message: 'Add sample setup for different runtime configurations?',
+      type: 'confirm',
+      default: true,
+      store: true,
+      when: answers => answers.SUPPORT_MULTIPLE_APP_IDS,
+    },
   },
   enforceCurrentFolder: true,
   data: (answers) => {
-    console.log(answers);
-    return ({
+    const TEAM_NAME_ASCII = answers.TEAM_NAME ? latinize(answers.TEAM_NAME) : answers.TEAM_NAME;
+
+    data = ({
       ...answers,
       PROJECT_NAME: packageName,
-      ENABLE_WORKSPACES: workspaceExists || answers.ENABLE_WORKSPACES,
-      HAS_EXTENSION_POSTFIX: answers.EXTENSION_POSTFIX !== defaultExtensionPostfix,
+      ENABLE_WORKSPACES: workspaceExists,
       INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION: true,
+      TEAM_NAME_ASCII,
     });
+
+    return data;
+  },
+  post: (ctx) => {
+    ctx.log.info('Making sure react-native-device-info is installed');
+    yarnInstall(['react-native-device-info'], {
+      respectNpm5: !yarnLockExists(),
+    });
+
+    if (data.TEAM_NAME_ASCII !== ctx.answers.TEAM_NAME) {
+      ctx.log.warn(`iTunes Connect team names are not supporting non-ascii characters. We've tried to convert it (we got ${data.TEAM_NAME_ASCII}) but please double-check on https://itunesconnect.apple.com/ that it's correctly set.`);
+    }
+
+    if (!process.env.MATCH_USERNAME || !process.env.FASTLANE_USER) {
+      ctx.log.warn(`
+      It's recommended to add your username to your environment variables (so you don't get asked for it all the time), if you're using ~/.bash_profile:
+      export MATCH_USERNAME=myappleid@myemailprovider.com
+      export FASTLANE_USER=myappleid@myemailprovider.com
+      `);
+    }
   },
   move: {
     gitignore: '.gitignore',
   },
-  /* filter: {
-    config: 'INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION',
-  }, */
+  filters: {
+    'config/*': '!INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION',
+  },
   showTip: true,
   gitInit: false,
 };

@@ -35,7 +35,7 @@ def certs_n_shit(app_identifier)
     type: "appstore",
     app_identifier: [
       app_identifier,
-      <% if(HAS_EXTENSION_POSTFIX) { '#' } %>"#{app_identifier}.<%= EXTENSION_POSTFIX %>"
+      <% if(HAS_EXTENSION_SUFFIX) {%>"#{app_identifier}.<%= EXTENSION_SUFFIX %>"<%}%>
     ],
     clone_branch_directly: true
   ) # more information: https://codesigning.guide
@@ -51,10 +51,11 @@ end
 before_all do
   versionNumber = JSON.parse(File.read("../package.json"))["version"]
   ENV['VERSION_NUMBER'] = ENV['FL_VERSION_NUMBER_VERSION_NUMBER'] = lane_context[SharedValues::VERSION_NUMBER] = versionNumber
-  <% if(!ENABLE_TEAMS) { %>#<%}%>ENV['FASTLANE_TEAM_NAME'] = ENV['FASTLANE_ITC_TEAM_NAME'] = ENV['DEV_PORTAL_TEAM_NAME'] = ENV['PILOT_TEAM_NAME'] = '<%= TEAM_NAME %>'
-  <% if(!ENABLE_ITC_PROVIDER) { %>#<%}%>ENV['PILOT_ITC_PROVIDER'] = '<%= PILOT_ITC_PROVIDER %>'
+  <% if(ENABLE_TEAMS) { %>ENV['FASTLANE_TEAM_NAME'] = ENV['DEV_PORTAL_TEAM_NAME'] = '<%= TEAM_NAME %>'
+  ENV['PILOT_TEAM_NAME'] = ENV['FASTLANE_ITC_TEAM_NAME'] = '<%=TEAM_NAME_ASCII%>'<%}%>
+  <% if(ENABLE_ITC_PROVIDER) { %>ENV['PILOT_ITC_PROVIDER'] = '<%= PILOT_ITC_PROVIDER %>'<%}%>
 
-  <% if(!MATCH_GIT_URL) { '#' } %>ENV['MATCH_GIT_URL'] = '<%= MATCH_GIT_URL %>'
+  <% if(!MATCH_GIT_URL) {%>#<%}%>ENV['MATCH_GIT_URL'] = '<%= MATCH_GIT_URL %>'
   <% if(!ENABLE_SUPPLY_JSON_KEY) { %>#<% } %>ENV['SUPPLY_JSON_KEY'] = ENV['<%= SUPPLY_JSON_KEY %>']
 end
 
@@ -88,15 +89,12 @@ platform :android do
 
     lane_context[SharedValues::BUILD_NUMBER] = buildNumber
     <% if(ENABLE_BUGSNAG) { %>
-    bundleForBugsnag("android")
+    bundleForBugsnag('android')
     <% } %>
-    <% if(!INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION) { %> # <% } %>deployandroid('test')
-    deployandroid('production', true)
-
-    git_commit(
-      message: "New Android alpha release #{versionNumber} (#{buildNumber})",
-      path: ["fastlane/android/buildNumber"]
-    )
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>#when building multiple flavors
+    #deployandroid(false, 'test')
+    #deployandroid(true, 'production')<%}%>
+    deployandroid(true, '')
 
     add_git_tag(
       grouping: "fastlane-android-builds",
@@ -117,7 +115,7 @@ platform :android do
     gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
     gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: 'test',  properties: {
       'buildNumber' => buildNumber.to_i,
-      'versionName' => ENV['VERSION_NUMBER']
+      'versionNumber' => ENV['VERSION_NUMBER']
     }) # Build the Release APK
 
     notification(
@@ -127,7 +125,7 @@ platform :android do
   end
 end
 
-def deployandroid(flavor, is_production = false)
+def deployandroid(is_production = false, flavor)
   `find $TMPDIR/react-native-packager-cache-* -name "mypattern" | xargs rm`;
   `rm -rf $TMPDIR`;
 
@@ -143,15 +141,17 @@ def deployandroid(flavor, is_production = false)
     )
   end
 
+  path_to_apk = flavor != '' ? "android/app/build/outputs/apk/app-#{flavor}-release.apk" : "android/app/build/outputs/apk/app-release.apk"
+
   gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
   gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: flavor, properties: {
     'buildNumber' => ENV['BUILD_NUMBER'],
-    'versionName' => ENV['VERSION_NUMBER']
+    'versionNumber' => ENV['VERSION_NUMBER']
   }) # Build the Release APK
 
   supply(track: 'alpha',
     package_name: app_identifier,
-    apk: "android/app/build/outputs/apk/app-#{flavor}-release.apk",
+    apk: path_to_apk,
     skip_upload_metadata: true,
     skip_upload_images: true,
     skip_upload_screenshots: true
@@ -159,6 +159,12 @@ def deployandroid(flavor, is_production = false)
   <% if(ENABLE_BUGSNAG) { %>
   uploadBugsnag('android', app_identifier, ENV['VERSION_NUMBER'], lane_context[SharedValues::BUILD_NUMBER])
   <% } %>
+
+  add_git_tag(
+    grouping: "fastlane-android-builds",
+    prefix: "#{ENV['VERSION_NUMBER']}/",
+    build_number: buildNumber
+  )
 
   reset_git_repo(
     force: true,
@@ -178,18 +184,17 @@ def resignAndDeploy(app_identifier)
       ":CFBundleIdentifier" => app_identifier,
     },
   )
-
-  # this is an example if you have an extension
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>act(
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>  archive_path: "<%= PROJECT_NAME %>.ipa",
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>  plist_file: "PlugIns/<%= EXTENSION_POSTFIX %>.appex/Info.plist",
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>  plist_values: {
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>    ":CFBundleIdentifier" => "#{app_identifier}.<%= EXTENSION_POSTFIX %>",
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>  },
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>)
+  <% if(HAS_EXTENSION_SUFFIX) {%>
+  act(
+    archive_path: "<%= PROJECT_NAME %>.ipa",
+    plist_file: "PlugIns/<%= EXTENSION_SUFFIX %>.appex/Info.plist",
+    plist_values: {
+      ":CFBundleIdentifier" => "#{app_identifier}.<%= EXTENSION_SUFFIX %>",
+    },
+  )<%}%>
 
   sigh(app_identifier: "#{app_identifier}")
-  <% if(HAS_EXTENSION_POSTFIX) { '#' } %>sigh(app_identifier: "#{app_identifier}.<%= EXTENSION_POSTFIX %>")
+  <% if(HAS_EXTENSION_SUFFIX) {%>sigh(app_identifier: "#{app_identifier}.<%= EXTENSION_SUFFIX %>")<%}%>
 
   resign(
     ipa: "<%= PROJECT_NAME %>.ipa", # can omit if using the `ipa` action
@@ -198,13 +203,14 @@ def resignAndDeploy(app_identifier)
     bundle_id: app_identifier,
     provisioning_profile: {
       "#{app_identifier}" => "AppStore_#{app_identifier}.mobileprovision",
-      <% if(HAS_EXTENSION_POSTFIX) { '#' } %>"#{app_identifier}.<%= EXTENSION_POSTFIX %>" => "AppStore_#{app_identifier}.<%= EXTENSION_POSTFIX %>.mobileprovision"
+      <% if(HAS_EXTENSION_SUFFIX) {%>"#{app_identifier}.<%= EXTENSION_SUFFIX %>" => "AppStore_#{app_identifier}.<%= EXTENSION_SUFFIX %>.mobileprovision"<%}%>
     }
   )
 
   begin
     pilot(
       skip_waiting_for_build_processing: true,
+      wait_for_uploaded_build: false,
       app_identifier: ENV['APP_IDENTIFIER'],
     )
 
@@ -238,14 +244,15 @@ platform :ios do
 
   desc "certs_n_shit"
   lane :certs do
-    <% if(!INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION) { %> # <% } %>certs_n_shit('<%= APP_IDENTIFIER %>.development')
-    <% if(INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION) { %> # <% } %>certs_n_shit('<%= APP_IDENTIFIER %>')
+    # recommended if you're using the config setup suggested
+    # certs_n_shit('<%= APP_IDENTIFIER %>.development')
+    certs_n_shit('<%= APP_IDENTIFIER %>')
   end
 
   desc "deploy all ios builds"
   lane :deployios do
     # add all app identifiers you want to upload here
-    <% if(!INCLUDE_SAMPLE_CONFIG_IMPLEMENTATION) { %> # <% } %>resignAndDeploy('<%= APP_IDENTIFIER %>.test')
+    <% if(!SUPPORT_MULTIPLE_APP_IDS) {%>#resignAndDeploy('<%= APP_IDENTIFIER %>.test')<%}%>
     resignAndDeploy('<%= APP_IDENTIFIER %>')
   end
 
@@ -279,7 +286,8 @@ platform :ios do
 
     gym(
       scheme: "<%= PROJECT_NAME %>",
-      <% if(!ENABLE_WORKSPACES) { '#' } %>workspace: './ios/<%= PROJECT_NAME %>.xcworkspace'
+      <% if(ENABLE_WORKSPACES) {%>workspace: './ios/<%= PROJECT_NAME %>.xcworkspace'<%}%>
+      <% if(!ENABLE_WORKSPACES) {%>project: ENV["XCODE_PROJECT"]<%}%>
     )
     <% if(ENABLE_BUGSNAG) { %>
     bundleForBugsnag("ios")

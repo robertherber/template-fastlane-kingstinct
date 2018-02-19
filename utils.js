@@ -8,6 +8,13 @@ const getPackageName = () => {
   return pkg.name;
 };
 
+const yarnLockExists = () => {
+  // eslint-disable-next-line global-require, import/no-dynamic-require
+  const pathToYarnLock = `${process.cwd()}/yarn.lock`;
+
+  return fs.existsSync(pathToYarnLock);
+};
+
 const getWorkspaceExists = () => {
   const pathToWorkspace = `${process.cwd()}/ios/${getPackageName()}.xcworkspace`;
 
@@ -17,4 +24,5 @@ const getWorkspaceExists = () => {
 module.exports = {
   getPackageName,
   getWorkspaceExists,
+  yarnLockExists,
 };
