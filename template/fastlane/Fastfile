@@ -137,7 +137,7 @@ platform :android do
     buildNumber = get_next_build_number('fastlane-android')
 
     gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
-    gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: 'test',  properties: {
+    gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: 'staging',  properties: {
       'buildNumber' => buildNumber.to_i,
       'versionNumber' => ENV['VERSION_NUMBER']
     }) # Build the Release APK
@@ -271,7 +271,7 @@ platform :ios do
   desc "deploy all ios builds"
   lane :deployios do
     # add all app identifiers you want to upload here
-    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>resignAndDeploy('<%= APP_IDENTIFIER %>.test', 'Beta')<%}%>
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>resignAndDeploy('<%= APP_IDENTIFIER %>.staging', 'Beta')<%}%>
     resignAndDeploy('<%= APP_IDENTIFIER %>', false)
   end
 

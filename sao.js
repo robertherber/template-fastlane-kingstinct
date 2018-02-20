@@ -170,8 +170,8 @@ module.exports = {
       ctx.log.info(`before 'applicationVariants.all { variant ->':
   ...
   productFlavors{
-    test {
-      applicationIdSuffix ".test"
+    staging {
+      applicationIdSuffix ".staging"
     }
     production{
 
