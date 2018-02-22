@@ -41,7 +41,7 @@ def setup_app(app_identifier, name_suffix, justBuild)
     app_name: name_suffix ? "<%= DISPLAY_NAME %> #{name_suffix} <%= EXTENSION_SUFFIX %>" : "<%= DISPLAY_NAME %> <%= EXTENSION_SUFFIX %>",
     app_identifier: app_identifier,
     skip_itc: justBuild,
-    bundle_identifier_suffix: <%= EXTENSION_SUFFIX %>",
+    bundle_identifier_suffix: "<%= EXTENSION_SUFFIX %>",
     <% if(ENABLE_TEAMS) {%>team_name: ENV['FASTLANE_TEAM_NAME'] <%}%>
   )
   <%}%>
