@@ -53,7 +53,7 @@ def certs_n_shit(app_identifier, name_suffix)
     type: "appstore",
     app_identifier: [
       app_identifier,
-      <% if(HAS_EXTENSION_SUFFIX) {%>"{app_identifier}.<%= EXTENSION_SUFFIX %>"<%}%>
+      <% if(HAS_EXTENSION_SUFFIX) {%>"#{app_identifier}.<%= EXTENSION_SUFFIX %>"<%}%>
     ],
     clone_branch_directly: true
   ) # more information: https://codesigning.guide
