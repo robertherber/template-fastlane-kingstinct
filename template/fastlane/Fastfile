@@ -317,6 +317,7 @@ platform :ios do
     reset_git_repo(
       files: [
         "./ios/<%= PROJECT_NAME %>/Info.plist",
+        <% if(HAS_EXTENSION_SUFFIX) {%>"./ios/<%= EXTENSION_SUFFIX %>/Info.plist",<%}%>
         "./ios/<%= PROJECT_NAME %>Tests/Info.plist",
         "./ios/<%= PROJECT_NAME %>-tvOS/Info.plist",
         "./ios/<%= PROJECT_NAME %>-tvOSTests/Info.plist",
