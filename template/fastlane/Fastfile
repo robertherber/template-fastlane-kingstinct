@@ -122,7 +122,7 @@ platform :android do
       build_number: buildNumber
     )
 
-    push_git_tags
+    `git push --tags --no-verify`
 
     <% if(SUPPORT_MULTIPLE_APP_IDS) {%>#add any additional appIds after adding the git tag - if one has succeeded (but others fail) we want the next build to be incremented
     deployandroid(true, 'production')<%}%>
@@ -331,7 +331,7 @@ platform :ios do
       build_number: buildNumber
     )
 
-    push_git_tags
+    `git push --tags --no-verify`
 
     deployios
 
