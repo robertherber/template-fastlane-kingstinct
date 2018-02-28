@@ -15,21 +15,6 @@ fastlane_version "2.19.1"
 
 default_platform :ios
 
-after_all do |lane|
-
-end
-
-def get_next_build_number(searchForTag)
-  lastbuildtag = `git describe --all --match "#{searchForTag}*"`
-  match = /\/[[:digit:]]+(\-|$)/.match(lastbuildtag)
-  lastchar = match[0].length - 1
-  buildNumberStr = match[0][1..lastchar]
-
-  buildNumber = buildNumberStr.to_i
-  buildNumber = buildNumber + 1
-  return buildNumber.to_s
-end
-
 def setup_app(app_identifier, name_suffix, justBuild)
   produce(
     app_name: name_suffix ? "<%= DISPLAY_NAME %> #{name_suffix}" : "<%= DISPLAY_NAME %>",
@@ -104,7 +89,11 @@ platform :android do
   lane :alpha do
     ensure_git_status_clean
 
-    buildNumber = get_next_build_number('fastlane-android')
+    buildNumber = (google_play_track_version_codes(
+      track: 'alpha',
+      package_name: '<%= APP_IDENTIFIER %>',
+      json_key: ENV['SUPPLY_JSON_KEY']
+    )[0].to_i + 1).to_s
     ENV['BUILD_NUMBER'] = buildNumber
     versionNumber = ENV['VERSION_NUMBER']
 
@@ -113,8 +102,8 @@ platform :android do
     bundleForBugsnag('android')
     <% } %>
     gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
+    deployandroid(true, 'production')
     <% if(SUPPORT_MULTIPLE_APP_IDS) {%>deployandroid(false, 'staging')<%}%>
-    <% if(!SUPPORT_MULTIPLE_APP_IDS) {%>deployandroid(true, '')<%}%>
 
     add_git_tag(
       grouping: "fastlane-android-builds",
@@ -124,27 +113,9 @@ platform :android do
 
     `git push --tags --no-verify`
 
-    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>#add any additional appIds after adding the git tag - if one has succeeded (but others fail) we want the next build to be incremented
-    deployandroid(true, 'production')<%}%>
     notification(
       title: 'Done!',
       message: "Deployed new version #{versionNumber} (#{buildNumber}) to Google Play"
-    )
-  end
-
-  desc "Build Android"
-  lane :build do
-    buildNumber = get_next_build_number('fastlane-android')
-
-    gradle(task: 'clean', project_dir: "android/") # Clean the Gradle project
-    gradle(task: 'assemble', build_type: 'Release', project_dir: 'android/', flavor: 'staging',  properties: {
-      'buildNumber' => buildNumber.to_i,
-      'versionNumber' => ENV['VERSION_NUMBER']
-    }) # Build the Release APK
-
-    notification(
-      title: 'Done!',
-      message: "Android built and ready"
     )
   end
 end
@@ -271,8 +242,8 @@ platform :ios do
   desc "deploy all ios builds"
   lane :deployios do
     # add all app identifiers you want to upload here
-    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>resignAndDeploy('<%= APP_IDENTIFIER %>.staging', 'Beta')<%}%>
     resignAndDeploy('<%= APP_IDENTIFIER %>', false)
+    <% if(SUPPORT_MULTIPLE_APP_IDS) {%>resignAndDeploy('<%= APP_IDENTIFIER %>.staging', 'Beta')<%}%>
   end
 
   desc "Regenerates appIcons"
@@ -289,7 +260,10 @@ platform :ios do
   lane :beta do
     ensure_git_status_clean
 
-    buildNumber = get_next_build_number('fastlane-ios')
+    buildNumber = (latest_testflight_build_number(
+      version: ENV['VERSION_NUMBER'],
+      app_identifier: '<%= APP_IDENTIFIER %>'
+    ) + 1).to_s
     ENV['BUILD_NUMBER'] = ENV['FL_BUILD_NUMBER_BUILD_NUMBER'] = lane_context[SharedValues::BUILD_NUMBER] = buildNumber
 
     increment_build_number()
@@ -325,6 +299,8 @@ platform :ios do
       ]
     )
 
+    deployios
+
     # bump buildnumber by adding git tag
     add_git_tag(
       grouping: "fastlane-ios-builds",
@@ -333,8 +309,6 @@ platform :ios do
     )
 
     `git push --tags --no-verify`
-
-    deployios
 
     message = "Deployed new version #{ENV['VERSION_NUMBER']} (#{buildNumber}) to iTunes Connect, expected review time is #{review_time} days :rocket:";
 
